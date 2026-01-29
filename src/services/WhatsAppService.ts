@@ -3,13 +3,15 @@ import axios, { AxiosInstance } from "axios";
 import { DI_TOKENS } from "../di/tokens";
 import { IAppConfig } from "../config/IAppConfig";
 import { IWhatsAppService } from "./interfaces/IWhatsAppService";
+import { IEkaAuthService } from "./interfaces/IEkaAuthService";
 
 @injectable()
 export class WhatsAppService implements IWhatsAppService {
     private client: AxiosInstance;
 
     constructor(
-        @inject(DI_TOKENS.Config) private config: IAppConfig
+        @inject(DI_TOKENS.Config) private config: IAppConfig,
+        @inject(DI_TOKENS.EkaAuthService) private ekaAuthService: IEkaAuthService
     ) {
         this.client = axios.create({
             baseURL: "https://graph.facebook.com/v18.0",
@@ -26,6 +28,8 @@ export class WhatsAppService implements IWhatsAppService {
 
     public async handleIncomingMessage(body: any): Promise<void> {
         try {
+            await this.ekaAuthService.getValidToken();
+
             if (body.object === "whatsapp_business_account") {
                 const entry = body.entry?.[0];
                 const changes = entry?.changes?.[0];
@@ -37,29 +41,27 @@ export class WhatsAppService implements IWhatsAppService {
                     const from = message.from;
                     const messageType = message.type;
 
-                    console.log(`\n📱 From: ${from}`);
-                    console.log(`📋 Type: ${messageType}`);
+                    console.log(`From: ${from}`);
+                    console.log(`Type: ${messageType}`);
 
                     if (messageType === "text") {
                         const text = message.text.body;
-                        console.log(`📝 Message: ${text}`);
+                        console.log(`Message: ${text}`);
                         await this.sendTextMessage(from, `You said: "${text}"\n\nSend me a photo of your health document!`);
                     } else if (messageType === "image") {
                         const imageId = message.image.id;
                         const caption = message.image.caption || "(no caption)";
-                        console.log(`📸 Image ID: ${imageId}`);
-                        console.log(`📝 Caption: ${caption}`);
+                        console.log(`Image ID: ${imageId}`);
+                        console.log(`Caption: ${caption}`);
 
-                        // Placeholder for Health AI Logic
-                        await this.sendTextMessage(from, "✅ Document received! I will process this for your health record.");
+                        await this.sendTextMessage(from, "Document received! I will process this for your health record.");
                     } else {
-                        console.log(`ℹ️ Unsupported message type: ${messageType}`);
+                        console.log(`Unsupported message type: ${messageType}`);
                     }
                 }
             }
         } catch (error) {
-            console.error("❌ Error processing webhook:", error);
-            // We do not throw here to avoid preventing 200 OK response to WhatsApp
+            console.error("Error processing webhook:", error);
         }
     }
 
@@ -72,9 +74,9 @@ export class WhatsAppService implements IWhatsAppService {
                 type: "text",
                 text: { body: message },
             });
-            console.log(`✅ Message sent to ${to}`);
+            console.log(`Message sent to ${to}`);
         } catch (error: any) {
-            console.error("❌ Failed to send message:", error.response?.data || error.message);
+            console.error("Failed to send message:", error.response?.data || error.message);
         }
     }
 }

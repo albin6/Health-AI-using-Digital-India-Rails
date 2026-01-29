@@ -18,9 +18,12 @@ export class HealthController {
 
     public verifyAuth = async (req: Request, res: Response) => {
         try {
+            console.log("Verifying Auth");
             const token = await this.ekaAuthService.getValidToken();
+            console.log("Token: ", token);
             res.json({ status: "Authenticated", token_preview: token.substring(0, 10) + "..." });
         } catch (error) {
+            console.log("Auth Failed");
             res.status(500).json({ status: "Auth Failed", error: error instanceof Error ? error.message : "Unknown" });
         }
     };

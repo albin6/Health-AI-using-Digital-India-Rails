@@ -8,16 +8,12 @@ import { EkaAuthService } from "../services/EkaAuthService";
 import { WhatsAppService } from "../services/WhatsAppService";
 
 export function registerDependencies(): void {
-    // Config
     container.register(DI_TOKENS.Config, { useValue: config });
 
-    // Core Services (Stores)
     container.register(DI_TOKENS.TokenStore, { useClass: InMemoryTokenStore });
 
-    // Repositories
     container.register(DI_TOKENS.HealthRepository, { useClass: HealthRepository });
 
-    // Domain Services
     container.register(DI_TOKENS.HealthService, { useClass: HealthService });
     container.register(DI_TOKENS.EkaAuthService, { useClass: EkaAuthService });
     container.register(DI_TOKENS.WhatsAppService, { useClass: WhatsAppService });
