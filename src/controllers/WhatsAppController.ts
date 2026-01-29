@@ -15,16 +15,15 @@ export class WhatsAppController {
         const challenge = req.query["hub.challenge"] as string;
 
         if (this.whatsappService.verifyWebhook(mode, token)) {
-            console.log("✅ WEBHOOK VERIFIED");
+            console.log("WEBHOOK VERIFIED");
             res.status(200).send(challenge);
         } else {
-            console.log("❌ WEBHOOK VERIFICATION FAILED");
+            console.log("WEBHOOK VERIFICATION FAILED");
             res.status(403).end();
         }
     };
 
     public handleWebhook = async (req: Request, res: Response) => {
-        // Run async in background, return 200 immediately to WhatsApp
         this.whatsappService.handleIncomingMessage(req.body);
         res.status(200).end();
     };

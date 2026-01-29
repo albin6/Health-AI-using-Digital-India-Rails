@@ -22,33 +22,28 @@ export class EkaAuthService implements IEkaAuthService {
     }
 
     public async getValidToken(): Promise<string> {
-        // 1. Try to get cached token
         const cachedToken = await this.tokenStore.getAccessToken();
         if (cachedToken) {
             return cachedToken;
         }
 
-        // 2. Lock to prevent concurrent refresh/login
         return await this.mutex.runExclusive(async () => {
-            // Check again after acquiring lock (double-checked locking)
             const tokenAfterLock = await this.tokenStore.getAccessToken();
             if (tokenAfterLock) {
                 return tokenAfterLock;
             }
 
-            // 3. Try Refresh
             const refreshToken = await this.tokenStore.getRefreshToken();
             if (refreshToken) {
                 try {
-                    console.log("🔄 Attempting Token Refresh...");
+                    console.log("Attempting Token Refresh...");
                     return await this.performRefresh(refreshToken);
                 } catch (error) {
-                    console.error("⚠️ Refresh failed, falling back to full login.", error);
+                    console.error("Refresh failed, falling back to full login.", error);
                 }
             }
 
-            // 4. Fallback to Full Login
-            console.log("🔑 Performing Full Login...");
+            console.log("Performing Full Login...");
             return await this.performLogin();
         });
     }
@@ -65,31 +60,43 @@ export class EkaAuthService implements IEkaAuthService {
 
             return access_token;
         } catch (error) {
-            console.error("❌ Login Failed:", error);
+            console.error("Login Failed:", error);
             throw new Error("Failed to authenticate with Eka Care");
         }
     }
 
     private async performRefresh(refreshToken: string): Promise<string> {
-        // Note: Refresh API requires old access token in body sometimes, or just refresh token.
-        // Prompt says: body { refresh_token, access_token }. Access token might be needed even if expired.
-        // But store might filter it if expired. Let's assume store keeps it or we allow reading expired for refresh.
-        // Wait, InMemoryStore.getAccessToken() returns null if expired.
-        // We might need a raw method or just pass null if API allows it?
-        // Prompt says: "Header Authorization: <current_access_token>". 
-        // This effectively implies we need the *expired* token.
-        // For now, let's implement login fallback if refresh complexity is high, 
-        // OR update store to allow retrieval of expired token for refresh purposes.
-        // Simplified Strategy: Just Login if Refresh logic is tricky with expired tokens.
-        // But Prompt says "Refresh Token Flow (Automatic)".
+        const expiredAccessToken = await this.tokenStore.getAccessToken(true);
 
-        // Let's rely on Login for now as it's safer and less prone to "Expired vs Invalid" issues for MVP.
-        // Or better: Let's assume Login is cheap enough for now, or implement Refresh properly later.
-        // Re-reading payload: { refresh_token: "...", access_token: "..." }
+        if (!expiredAccessToken) {
+            console.warn("No expired access token found for refresh flow. Fallback to login.");
+            return this.performLogin();
+        }
 
-        // For robustness in this MVP step, I will stick to LOGIN fallback if refresh fails.
-        // But I will strictly try Login first if no token exists.
+        try {
+            const response = await this.client.post("/connect-auth/v1/account/refresh-token", {
+                refresh_token: refreshToken,
+                access_token: expiredAccessToken
+            }, {
+                headers: {
+                    "Authorization": expiredAccessToken,
+                    "Client-Id": this.config.eka.clientId
+                }
+            });
 
-        return this.performLogin();
+            const { access_token, refresh_token: new_refresh_token, expires_in, refresh_expires_in } = response.data;
+
+            await this.tokenStore.saveTokens(
+                access_token,
+                new_refresh_token || refreshToken,
+                expires_in,
+                refresh_expires_in
+            );
+
+            return access_token;
+        } catch (error) {
+            console.error("Refresh Failed:", error);
+            return this.performLogin();
+        }
     }
 }

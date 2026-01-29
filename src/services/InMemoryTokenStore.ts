@@ -8,9 +8,9 @@ export class InMemoryTokenStore implements ITokenStore {
     private accessTokenExpiry: number = 0;
     private refreshTokenExpiry: number = 0;
 
-    public async getAccessToken(): Promise<string | null> {
+    public async getAccessToken(includeExpired: boolean = false): Promise<string | null> {
         if (!this.accessToken) return null;
-        if (Date.now() >= this.accessTokenExpiry) return null;
+        if (!includeExpired && Date.now() >= this.accessTokenExpiry) return null;
         return this.accessToken;
     }
 
@@ -23,7 +23,6 @@ export class InMemoryTokenStore implements ITokenStore {
     public async saveTokens(accessToken: string, refreshToken: string, expiresIn: number, refreshExpiresIn: number): Promise<void> {
         this.accessToken = accessToken;
         this.refreshToken = refreshToken;
-        // expiresIn is usually in seconds
         this.accessTokenExpiry = Date.now() + expiresIn * 1000;
         this.refreshTokenExpiry = Date.now() + refreshExpiresIn * 1000;
     }
