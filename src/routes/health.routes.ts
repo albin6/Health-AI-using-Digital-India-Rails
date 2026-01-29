@@ -10,6 +10,7 @@ export function registerHealthRoutes(): Router {
 
     // Bind the method to the controller instance to preserve 'this' context
     router.get("/status", healthController.getHealth.bind(healthController));
+    router.get("/auth-check", healthController.verifyAuth.bind(healthController));
 
     return router;
 }

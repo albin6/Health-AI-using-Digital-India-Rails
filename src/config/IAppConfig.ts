@@ -6,4 +6,14 @@ export interface IAppConfig {
     db: {
         url?: string;
     };
+    eka: {
+        baseUrl: string;
+        clientId: string;
+        clientSecret: string;
+    };
+    whatsapp: {
+        verifyToken: string;
+        accessToken: string;
+        phoneNumberId: string;
+    };
 }
