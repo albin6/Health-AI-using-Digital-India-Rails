@@ -93,6 +93,9 @@ export class AbdmService implements IAbdmService {
                 params: {
                     mob: formattedMobile,
                     full_profile: false
+                },
+                headers: {
+                    "client-id": this.config.eka.clientId
                 }
             });
             console.log(`✅ [AbdmService] Fetched ${response.data?.length || 0} profiles`);
