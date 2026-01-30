@@ -4,6 +4,7 @@ import { DI_TOKENS } from "../di/tokens";
 import { IAppConfig } from "../config/IAppConfig";
 import { IWhatsAppService } from "./interfaces/IWhatsAppService";
 import { IEkaAuthService } from "./interfaces/IEkaAuthService";
+import { IWhatsAppFlowService } from "./interfaces/IWhatsAppFlowService";
 
 @injectable()
 export class WhatsAppService implements IWhatsAppService {
@@ -11,7 +12,8 @@ export class WhatsAppService implements IWhatsAppService {
 
     constructor(
         @inject(DI_TOKENS.Config) private config: IAppConfig,
-        @inject(DI_TOKENS.EkaAuthService) private ekaAuthService: IEkaAuthService
+        @inject(DI_TOKENS.EkaAuthService) private ekaAuthService: IEkaAuthService,
+        @inject(DI_TOKENS.WhatsAppFlowService) private flowService: IWhatsAppFlowService
     ) {
         this.client = axios.create({
             baseURL: "https://graph.facebook.com/v18.0",
@@ -41,23 +43,8 @@ export class WhatsAppService implements IWhatsAppService {
                     const from = message.from;
                     const messageType = message.type;
 
-                    console.log(`From: ${from}`);
-                    console.log(`Type: ${messageType}`);
-
-                    if (messageType === "text") {
-                        const text = message.text.body;
-                        console.log(`Message: ${text}`);
-                        await this.sendTextMessage(from, `You said: "${text}"\n\nSend me a photo of your health document!`);
-                    } else if (messageType === "image") {
-                        const imageId = message.image.id;
-                        const caption = message.image.caption || "(no caption)";
-                        console.log(`Image ID: ${imageId}`);
-                        console.log(`Caption: ${caption}`);
-
-                        await this.sendTextMessage(from, "Document received! I will process this for your health record.");
-                    } else {
-                        console.log(`Unsupported message type: ${messageType}`);
-                    }
+                    // Delegate to Flow Service
+                    await this.flowService.handleMessage(from, messageType, message);
                 }
             }
         } catch (error) {

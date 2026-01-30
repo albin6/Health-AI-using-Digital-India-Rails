@@ -4,18 +4,23 @@ import { HealthRepository } from "../repositories/HealthRepository";
 import { HealthService } from "../services/HealthService";
 import { config } from "../config";
 import { InMemoryTokenStore } from "../services/InMemoryTokenStore";
+import { InMemorySessionStore } from "../services/InMemorySessionStore";
 import { EkaAuthService } from "../services/EkaAuthService";
+import { AbdmService } from "../services/AbdmService";
+import { WhatsAppFlowService } from "../services/WhatsAppFlowService";
 import { WhatsAppService } from "../services/WhatsAppService";
 
 export function registerDependencies(): void {
-    container.register(DI_TOKENS.Config, { useValue: config });
-
+    container.register(DI_TOKENS.Config, { useValue: config }); // Core Services (Stores)
     container.register(DI_TOKENS.TokenStore, { useClass: InMemoryTokenStore });
+    container.register(DI_TOKENS.SessionStore, { useClass: InMemorySessionStore });
 
     container.register(DI_TOKENS.HealthRepository, { useClass: HealthRepository });
 
     container.register(DI_TOKENS.HealthService, { useClass: HealthService });
     container.register(DI_TOKENS.EkaAuthService, { useClass: EkaAuthService });
+    container.register(DI_TOKENS.AbdmService, { useClass: AbdmService });
+    container.register(DI_TOKENS.WhatsAppFlowService, { useClass: WhatsAppFlowService });
     container.register(DI_TOKENS.WhatsAppService, { useClass: WhatsAppService });
 
     console.log("Dependency Injection: All dependencies registered.");
