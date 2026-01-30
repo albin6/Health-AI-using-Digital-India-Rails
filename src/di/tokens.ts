@@ -12,7 +12,7 @@ export const DI_TOKENS = {
     AbdmService: Symbol.for("AbdmService"),
     WhatsAppFlowService: Symbol.for("WhatsAppFlowService"),
     WhatsAppService: Symbol.for("WhatsAppService"),
-    
+
     // New Services
     MedicalRecordService: Symbol.for("MedicalRecordService"),
     MaskingService: Symbol.for("MaskingService"),
@@ -21,4 +21,7 @@ export const DI_TOKENS = {
 
     // External/Config
     Config: Symbol.for("Config"),
+
+    // New Services
+    MlService: Symbol.for("MlService"),
 };

@@ -75,4 +75,47 @@ export class WhatsAppService implements IWhatsAppService {
             console.error("Failed to send message:", error.response?.data || error.message);
         }
     }
+
+    public async sendInteractiveMessage(to: string, bodyText: string, buttons: { id: string; title: string }[]): Promise<void> {
+        try {
+            await this.client.post(`/${this.config.whatsapp.phoneNumberId}/messages`, {
+                messaging_product: "whatsapp",
+                to: to,
+                type: "interactive",
+                interactive: {
+                    type: "button",
+                    body: { text: bodyText },
+                    action: {
+                        buttons: buttons.map(btn => ({
+                            type: "reply",
+                            reply: { id: btn.id, title: btn.title }
+                        }))
+                    }
+                }
+            });
+        } catch (error: any) {
+            console.error("❌ [WhatsAppService] Send Interactive Message Failed:", error.response?.data || error.message);
+        }
+    }
+
+    public async downloadMedia(mediaId: string): Promise<Buffer> {
+        console.log(`📡 [WhatsAppService] Downloading media: ${mediaId}`);
+        try {
+            // 1. Get Media URL
+            const urlResponse = await this.client.get(`/${mediaId}`);
+            const mediaUrl = urlResponse.data.url;
+
+            // 2. Download Media (as binary)
+            const mediaResponse = await axios.get(mediaUrl, {
+                headers: { "Authorization": `Bearer ${this.config.whatsapp.accessToken}` },
+                responseType: "arraybuffer"
+            });
+
+            console.log(`✅ [WhatsAppService] Media downloaded. Size: ${mediaResponse.data.length} bytes`);
+            return Buffer.from(mediaResponse.data);
+        } catch (error: any) {
+            console.error("❌ [WhatsAppService] Download Media Failed:", error.response?.data || error.message);
+            throw new Error("Failed to download media");
+        }
+    }
 }

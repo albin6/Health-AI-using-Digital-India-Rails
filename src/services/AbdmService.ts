@@ -73,4 +73,27 @@ export class AbdmService implements IAbdmService {
             throw new Error(error.response?.data?.error || "Failed to link PHR");
         }
     }
+
+    public async getProfileByMobile(mobile: string): Promise<any[]> {
+        // Ensure mobile has +91 prefix for this specific Eka API if needed, 
+        // but typically user enters 10 digits. The prompt example showed %2B91 prefix in query.
+        // Let's assume input is 10 digits and we add prefix.
+        const formattedMobile = mobile.startsWith("+91") ? mobile : `+91${mobile}`;
+        console.log(`📡 [AbdmService] Fetching profile by mobile: ${formattedMobile}`);
+
+        try {
+            // NOTE: Using Eka Profile API, not ABDM Auth API
+            const response = await this.client.get("/profiles/v1/patient/by-mobile/", {
+                params: {
+                    mob: formattedMobile,
+                    full_profile: false
+                }
+            });
+            console.log(`✅ [AbdmService] Fetched ${response.data?.length || 0} profiles`);
+            return response.data || [];
+        } catch (error: any) {
+            console.error("❌ [AbdmService] Get Profile By Mobile Failed:", error.response?.data || error.message);
+            throw new Error(error.response?.data?.error || "Failed to fetch profile details");
+        }
+    }
 }

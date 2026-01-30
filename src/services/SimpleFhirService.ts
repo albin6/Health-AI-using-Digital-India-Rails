@@ -11,46 +11,96 @@ export class SimpleFhirService implements IFhirService {
             entry: [] as any[]
         };
 
-        // Add Patient (Reference)
-        const patientRef = { reference: `Patient/${patientId}` };
+        const timestamp = new Date().toISOString();
 
-        // Add Observations
-        if (ocrData.observations && Array.isArray(ocrData.observations)) {
-            ocrData.observations.forEach((obs: any, index: number) => {
+        // 1. Patient Resource (Reference)
+        // Try to find name from PHI entities
+        let patientName = "Unknown";
+        if (ocrData.phi_detected?.entities) {
+            const nameEntity = ocrData.phi_detected.entities.find((e: any) => e.type === 'NAME');
+            if (nameEntity) patientName = nameEntity.text;
+        }
+
+        const patientResource = {
+            resourceType: "Patient",
+            id: patientId, // Use mobile as ID for simplicity in this context
+            name: [{ text: patientName }],
+            telecom: [{ system: "phone", value: patientId }]
+        };
+        bundle.entry.push({ resource: patientResource });
+
+        // 2. Encounter Resource
+        const encounterId = `enc-${Date.now()}`;
+        const encounterResource = {
+            resourceType: "Encounter",
+            id: encounterId,
+            status: "finished",
+            class: { system: "http://terminology.hl7.org/CodeSystem/v3-ActCode", code: "AMB", display: "ambulatory" },
+            subject: { reference: `Patient/${patientId}` },
+            period: { start: timestamp }
+        };
+        bundle.entry.push({ resource: encounterResource });
+
+        const extracted = ocrData.extracted_data || {};
+
+        // 3. Medications -> MedicationRequest
+        if (extracted.medications && Array.isArray(extracted.medications)) {
+            extracted.medications.forEach((med: any, index: number) => {
                 bundle.entry.push({
                     resource: {
-                        resourceType: "Observation",
-                        id: `obs-${index}-${Date.now()}`,
-                        status: "final",
-                        code: {
-                            coding: [{
-                                system: "http://loinc.org",
-                                code: obs.code,
-                                display: obs.display
-                            }]
+                        resourceType: "MedicationRequest",
+                        id: `med-${index}-${Date.now()}`,
+                        status: "active",
+                        intent: "order",
+                        subject: { reference: `Patient/${patientId}` },
+                        encounter: { reference: `Encounter/${encounterId}` },
+                        medicationCodeableConcept: {
+                            text: med.name
                         },
-                        subject: patientRef,
-                        valueQuantity: {
-                            value: obs.value,
-                            unit: obs.unit,
-                            system: "http://unitsofmeasure.org"
+                        dosageInstruction: [{
+                            text: `${med.dosage || ''} ${med.frequency || ''} ${med.duration || ''}`.trim()
+                        }]
+                    }
+                });
+            });
+        }
+
+        // 4. Tests Ordered -> ServiceRequest
+        if (extracted.tests_ordered && Array.isArray(extracted.tests_ordered)) {
+            extracted.tests_ordered.forEach((testName: string, index: number) => {
+                bundle.entry.push({
+                    resource: {
+                        resourceType: "ServiceRequest",
+                        id: `test-${index}-${Date.now()}`,
+                        status: "active",
+                        intent: "order",
+                        subject: { reference: `Patient/${patientId}` },
+                        encounter: { reference: `Encounter/${encounterId}` },
+                        code: {
+                            text: testName
                         }
                     }
                 });
             });
         }
 
-        // Add DiagnosticReport
-        bundle.entry.push({
-            resource: {
-                resourceType: "DiagnosticReport",
-                status: "final",
-                code: { text: "General Health Checkup" },
-                subject: patientRef,
-                effectiveDateTime: ocrData.metadata.date,
-                result: bundle.entry.map(e => ({ reference: `${e.resource.resourceType}/${e.resource.id}` }))
-            }
-        });
+        // 5. Diagnosis -> Condition
+        if (extracted.diagnosis) {
+            bundle.entry.push({
+                resource: {
+                    resourceType: "Condition",
+                    id: `cond-${Date.now()}`,
+                    clinicalStatus: {
+                        coding: [{ system: "http://terminology.hl7.org/CodeSystem/condition-clinical", code: "active" }]
+                    },
+                    subject: { reference: `Patient/${patientId}` },
+                    encounter: { reference: `Encounter/${encounterId}` },
+                    code: {
+                        text: extracted.diagnosis
+                    }
+                }
+            });
+        }
 
         return bundle;
     }

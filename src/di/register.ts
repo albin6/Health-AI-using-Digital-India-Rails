@@ -19,9 +19,10 @@ import { MedicalRecordService } from "../services/MedicalRecordService";
 import { MockMaskingService } from "../services/MockMaskingService";
 import { MockOcrService } from "../services/MockOcrService";
 import { SimpleFhirService } from "../services/SimpleFhirService";
+import { MlService } from "../services/MlService";
 
 export function registerDependencies(): void {
-    container.register(DI_TOKENS.Config, { useValue: config }); 
+    container.register(DI_TOKENS.Config, { useValue: config });
 
     // Core Services (Stores) - Ideally replace with Mongo/Redis later
     container.register(DI_TOKENS.TokenStore, { useClass: InMemoryTokenStore });
@@ -34,15 +35,16 @@ export function registerDependencies(): void {
     container.register(DI_TOKENS.AbdmService, { useClass: AbdmService });
     container.register(DI_TOKENS.WhatsAppFlowService, { useClass: WhatsAppFlowService });
     container.register(DI_TOKENS.WhatsAppService, { useClass: WhatsAppService });
+    container.register(DI_TOKENS.MlService, { useClass: MlService });
 
     // New Clean Architecture Implementations
     container.register(DI_TOKENS.UserRepository, { useClass: MongoUserRepository });
     container.register(DI_TOKENS.MedicalRecordRepository, { useClass: MongoMedicalRecordRepository });
-    
+
     container.register(DI_TOKENS.MaskingService, { useClass: MockMaskingService });
     container.register(DI_TOKENS.OcrService, { useClass: MockOcrService });
     container.register(DI_TOKENS.FhirService, { useClass: SimpleFhirService });
-    
+
     container.register(DI_TOKENS.MedicalRecordService, { useClass: MedicalRecordService });
 
     console.log("Dependency Injection: All dependencies registered.");
