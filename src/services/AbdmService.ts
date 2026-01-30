@@ -48,32 +48,34 @@ export class AbdmService implements IAbdmService {
     }
 
     public async verifyOtp(txnId: string, otp: string): Promise<{ txnId: string; profiles: any[] }> {
+        console.log(`📡 [AbdmService] Verifying OTP for TxnID: ${txnId}`);
         try {
             const response = await this.client.post("/abdm/na/v1/profile/login/verify", {
                 otp: otp,
                 txn_id: txnId
             });
-            console.log("ABDM Verify OTP Success");
+            console.log("✅ [AbdmService] Verify OTP Success");
             return {
                 txnId: response.data.txn_id,
                 profiles: response.data.abha_profiles || []
             };
         } catch (error: any) {
-            console.error("ABDM Verify OTP Failed:", error.response?.data || error.message);
+            console.error("❌ [AbdmService] Verify OTP Failed:", error.response?.data || error.message);
             throw new Error(error.response?.data?.error || "Failed to verify OTP");
         }
     }
 
     public async linkPhr(txnId: string, phrAddress: string): Promise<any> {
+        console.log(`📡 [AbdmService] Requesting Link PHR for: ${phrAddress}`);
         try {
             const response = await this.client.post("/abdm/na/v1/profile/login/phr", {
                 phr_address: phrAddress,
                 txn_id: txnId
             });
-            console.log("ABDM Link PHR Success");
+            console.log("✅ [AbdmService] Link PHR Success");
             return response.data.profile;
         } catch (error: any) {
-            console.error("ABDM Link PHR Failed:", error.response?.data || error.message);
+            console.error("❌ [AbdmService] Link PHR Failed:", error.response?.data || error.message);
             throw new Error(error.response?.data?.error || "Failed to link PHR");
         }
     }
