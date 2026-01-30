@@ -16,4 +16,7 @@ export interface IAppConfig {
         accessToken: string;
         phoneNumberId: string;
     };
+    ml: {
+        apiUrl: string;
+    };
 }

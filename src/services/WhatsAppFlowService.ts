@@ -4,13 +4,16 @@ import { IWhatsAppFlowService } from "./interfaces/IWhatsAppFlowService";
 import { ISessionStore } from "./interfaces/ISessionStore";
 import { IAbdmService } from "./interfaces/IAbdmService";
 import { IWhatsAppService } from "./interfaces/IWhatsAppService";
+import { IFhirService } from "./interfaces/IFhirService"; // Added import
 import { ConversationState } from "../types/SessionState";
+import { ProcessingStatus } from "../types/domain";
 
 @injectable()
 export class WhatsAppFlowService implements IWhatsAppFlowService {
     constructor(
         @inject(DI_TOKENS.SessionStore) private sessionStore: ISessionStore,
-        @inject(DI_TOKENS.AbdmService) private abdmService: IAbdmService
+        @inject(DI_TOKENS.AbdmService) private abdmService: IAbdmService,
+        @inject(DI_TOKENS.FhirService) private fhirService: IFhirService // Injected IFhirService
     ) { }
 
     // Helper to resolve WhatsAppService lazily to avoid circular dependency
@@ -49,6 +52,16 @@ export class WhatsAppFlowService implements IWhatsAppFlowService {
             case ConversationState.AWAITING_MOBILE_UPLOAD:
                 await this.handleMobileInput(from, textBody, session.state);
                 break;
+            case ConversationState.AWAITING_PROFILE_CONFIRMATION:
+                await this.handleProfileConfirmation(from, textBody, session);
+                break;
+            case ConversationState.AWAITING_PRESCRIPTION_UPLOAD:
+                if (messageType === 'image') {
+                    await this.handleImageUpload(from, content, session);
+                } else {
+                    await this.whatsappService.sendTextMessage(from, "⚠️ Please upload an image file.");
+                }
+                break;
             case ConversationState.AWAITING_OTP:
                 await this.handleOtpInput(from, textBody, session.txnId!);
                 break;
@@ -73,7 +86,7 @@ export class WhatsAppFlowService implements IWhatsAppFlowService {
         console.log(`💾 [FlowService] State saved: MENU_SELECTION`);
         await this.whatsappService.sendTextMessage(
             from,
-            "👋 Welcome to Health AI!\n\nPlease select an option:\n1️⃣ View Details\n2️⃣ Upload Data"
+            "👋 Welcome to ABHA Pocket!\n\nPlease select an option:\n1️⃣ View Details\n2️⃣ Upload Data"
         );
     }
 
@@ -95,7 +108,6 @@ export class WhatsAppFlowService implements IWhatsAppFlowService {
 
     private async handleMobileInput(from: string, input: string, currentState: ConversationState) {
         console.log(`▶️ [FlowService] handleMobileInput. Validating input...`);
-
         // Validation: 10 digits (Mobile) or 14 digits (ABHA Number)
         if (!/^\d{10}$/.test(input) && !/^\d{14}$/.test(input)) {
             console.warn(`⚠️ [FlowService] Invalid input format: ${input}`);
@@ -103,14 +115,44 @@ export class WhatsAppFlowService implements IWhatsAppFlowService {
             return;
         }
 
+        // --- UPLOAD DATA FLOW ---
         if (currentState === ConversationState.AWAITING_MOBILE_UPLOAD) {
-            console.log(`ℹ️ [FlowService] Upload flow selected (placeholder)`);
-            await this.whatsappService.sendTextMessage(from, "✅ Mobile received. Upload feature coming soon!");
-            await this.sessionStore.clearSession(from);
+            console.log(`ℹ️ [FlowService] Upload flow - Fetching Profile for ${input}`);
+            try {
+                // 1. Fetch Profile
+                const profiles = await this.abdmService.getProfileByMobile(input);
+                if (!profiles || profiles.length === 0) {
+                    await this.whatsappService.sendTextMessage(from, "❌ No profile found for this number. Please check and try again.");
+                    return;
+                }
+
+                // 2. Select first profile (assuming single user mapping for simplicity or user picks first)
+                const profile = profiles[0];
+                console.log(`✅ [FlowService] Profile found: ${profile.fln}`);
+
+                // 3. Store temp profile and ask for confirmation
+                await this.sessionStore.updateState(from, {
+                    state: ConversationState.AWAITING_PROFILE_CONFIRMATION,
+                    mobileNumber: input,
+                    tempData: profile // Store profile to display/use later
+                });
+
+                // 4. Send Confirmation Message
+                const msg = `👤 **Profile Verified**\n\nName: ${profile.fln}\nABHA: ${profile.abha}\n\nIs this you?`;
+                await this.whatsappService.sendInteractiveMessage(from, msg, [
+                    { id: "yes_confirm", title: "Yes" },
+                    { id: "no_retry", title: "No" }
+                ]);
+
+            } catch (error: any) {
+                console.error(`❌ [FlowService] Fetch Profile Error: ${error.message}`);
+                await this.whatsappService.sendTextMessage(from, "❌ Failed to fetch profile. Please try again later.");
+                await this.startConversation(from);
+            }
             return;
         }
 
-        // View Details Flow
+        // --- VIEW DETAILS FLOW (Standard Login) ---
         try {
             await this.whatsappService.sendTextMessage(from, "⏳ Initiating login...");
             console.log(`📡 [FlowService] Calling AbdmService.initLogin for ${input}`);
@@ -137,6 +179,105 @@ export class WhatsAppFlowService implements IWhatsAppFlowService {
 
             // Best approach: Reset to MENU so they can choose again (or try number again)
             await this.startConversation(from);
+        }
+    }
+
+    private async handleProfileConfirmation(from: string, input: string, session: any) {
+        console.log(`▶️ [FlowService] handleProfileConfirmation. Input: ${input}`);
+        const normalizedInput = input.trim().toLowerCase();
+
+        if (normalizedInput === "yes" || normalizedInput === "y" || normalizedInput === "yes_confirm") {
+            // YES -> Ask for Image
+            await this.sessionStore.updateState(from, {
+                state: ConversationState.AWAITING_PRESCRIPTION_UPLOAD
+            });
+            await this.whatsappService.sendTextMessage(from, "📸 Please upload an image of the prescription.");
+        } else if (normalizedInput === "no" || normalizedInput === "n" || normalizedInput === "no_retry") {
+            // NO -> Retry Mobile
+            await this.sessionStore.updateState(from, {
+                state: ConversationState.AWAITING_MOBILE_UPLOAD,
+                tempData: undefined
+            });
+            await this.whatsappService.sendTextMessage(from, "🔄 Please re-enter the mobile number linked with your ABHA:");
+        } else {
+            // Invalid Input
+            await this.whatsappService.sendInteractiveMessage(from, "⚠️ Please select an option:", [
+                { id: "yes_confirm", title: "Yes" },
+                { id: "no_retry", title: "No" }
+            ]);
+        }
+    }
+
+    private async handleImageUpload(from: string, messageContent: any, session: any) {
+        console.log(`▶️ [FlowService] handleImageUpload`);
+
+        // 1. Check if image exists
+        const imageId = messageContent?.image?.id;
+        if (!imageId) {
+            await this.whatsappService.sendTextMessage(from, "⚠️ Please upload a valid image file.");
+            return;
+        }
+
+        try {
+            // 2. Notify User - Processing
+            await this.whatsappService.sendTextMessage(from, "☕ Processing image... This may take a moment. Grab a cup of tea!");
+
+            // 3. Download Image
+            const imageBuffer = await this.whatsappService.downloadMedia(imageId);
+            const imageBase64 = imageBuffer.toString("base64");
+
+            // 4. Call ML Service
+            const mlService = container.resolve<any>(DI_TOKENS.MlService); // Lazy resolve
+            const mlResponse = await mlService.processImage(from, imageBase64); // Using 'from' (phone) as userId for now
+
+            // 5. Convert to FHIR
+            console.log(`⚕️ [FlowService] Converting extracted data to FHIR...`);
+            const fhirBundle = await this.fhirService.mapToFhir(mlResponse, from);
+
+            // 6. Save Result to DB
+            const repo = container.resolve<any>(DI_TOKENS.MedicalRecordRepository);
+            await repo.create({
+                userUuid: from,
+                fileUrl: "whatsapp_media_id_" + imageId, // Placeholder
+                status: ProcessingStatus.FHIR_MAPPED,
+                ocrOutput: mlResponse,
+                fhirResource: fhirBundle, // Save FHIR bundle
+                auditLog: [{ status: ProcessingStatus.FHIR_MAPPED, details: "Processed via WhatsApp Flow & FHIR Mapped" }]
+            });
+
+            // 7. Success Message
+            await this.whatsappService.sendTextMessage(from, "✅ Analysis Complete! Your report has been successfully uploaded");
+
+            // 8. Send Structured Summary
+            const extracted = mlResponse.extracted_data || {};
+            let summaryMsg = "📄 *Prescription Summary*\n";
+
+            if (extracted.diagnosis) {
+                summaryMsg += `\n🩺 *Diagnosis:* ${extracted.diagnosis}`;
+            }
+
+            if (extracted.medications && extracted.medications.length > 0) {
+                summaryMsg += `\n\n💊 *Medications:*`;
+                extracted.medications.forEach((m: any) => {
+                    const details = [m.dosage, m.frequency, m.duration].filter(d => d).join(", ");
+                    summaryMsg += `\n- ${m.name}${details ? ` (${details})` : ""}`;
+                });
+            }
+
+            if (extracted.tests_ordered && extracted.tests_ordered.length > 0) {
+                summaryMsg += `\n\n🧪 *Tests Ordered:*`;
+                extracted.tests_ordered.forEach((t: string) => {
+                    summaryMsg += `\n- ${t}`;
+                });
+            }
+
+            await this.whatsappService.sendTextMessage(from, summaryMsg);
+
+            await this.startConversation(from); // Reset
+
+        } catch (error: any) {
+            console.error(`❌ [FlowService] Image Processing Failed: ${error.message}`);
+            await this.whatsappService.sendTextMessage(from, "❌ Failed to process prescription. Please try again.");
         }
     }
 
