@@ -19,34 +19,49 @@ export class WhatsAppFlowService implements IWhatsAppFlowService {
     }
 
     public async handleMessage(from: string, messageType: string, content: any): Promise<void> {
+        console.log(`▶️ [FlowService] handleMessage called for ${from}`);
         let session = await this.sessionStore.getSession(from);
+        console.log(`ℹ️ [FlowService] Current Session State: ${session?.state || "NONE"}`);
 
-        console.log("Message Type:", messageType);
-        console.log("Content:", content);
+        // Extract plain text body or interactive button response
+        let textBody = "";
+        if (messageType === "text" && content?.text?.body) {
+            textBody = content.text.body.trim();
+        } else if (messageType === "interactive" && content?.interactive?.button_reply) {
+            textBody = content.interactive.button_reply.id; // Or title
+        }
+
+        console.log(`📝 [FlowService] Extracted Text: "${textBody}"`);
+
         // Auto-start for new users or explicit "Hi"
-        if (!session || (messageType === "text" && (content.toLowerCase() === "hi" || content.toLowerCase() === "hello"))) {
+        if (!session || (messageType === "text" && (textBody.toLowerCase() === "hi" || textBody.toLowerCase() === "hello"))) {
+            console.log("👋 [FlowService] Starting new conversation");
             await this.startConversation(from);
             return;
         }
 
+        console.log(`🔄 [FlowService] Routing based on state: ${session.state}`);
         switch (session.state) {
             case ConversationState.MENU_SELECTION:
-                await this.handleMenuSelection(from, messageType, content);
+                await this.handleMenuSelection(from, messageType, textBody);
                 break;
             case ConversationState.AWAITING_MOBILE_VIEW:
             case ConversationState.AWAITING_MOBILE_UPLOAD:
-                await this.handleMobileInput(from, content, session.state);
+                await this.handleMobileInput(from, textBody, session.state);
                 break;
             case ConversationState.AWAITING_OTP:
-                await this.handleOtpInput(from, content, session.txnId!);
+                await this.handleOtpInput(from, textBody, session.txnId!);
                 break;
             case ConversationState.LOGGED_IN:
+                console.log("ℹ️ [FlowService] User already logged in");
                 await this.whatsappService.sendTextMessage(from, "You are already logged in. Type 'Hi' to restart.");
                 break;
             default:
+                console.warn(`⚠️ [FlowService] Unknown state: ${session.state}, restarting.`);
                 await this.startConversation(from);
                 break;
         }
+        console.log(`⏹️ [FlowService] handleMessage processing finished`);
     }
 
     private async startConversation(from: string) {
@@ -60,10 +75,8 @@ export class WhatsAppFlowService implements IWhatsAppFlowService {
         );
     }
 
-    private async handleMenuSelection(from: string, type: string, content: any) {
-        const text = content.trim();
-        console.log("Menu Selection Content:", content);
-        console.log("Menu Selection Text:", text);
+    private async handleMenuSelection(from: string, type: string, text: string) {
+        console.log(`▶️ [FlowService] handleMenuSelection. Input: ${text}`);
         if (text === "1") {
             await this.sessionStore.updateState(from, { state: ConversationState.AWAITING_MOBILE_VIEW });
             await this.whatsappService.sendTextMessage(from, "Please enter your 10-digit Mobile Number or ABHA Number to view details:");
@@ -75,11 +88,12 @@ export class WhatsAppFlowService implements IWhatsAppFlowService {
         }
     }
 
-    private async handleMobileInput(from: string, content: any, currentState: ConversationState) {
-        const input = content.trim();
-        // Basic validation: 10 digits (Mobile) or 14 digits (ABHA). Let's assume user enters Mobile for API 1.
-        if (!/^\d{10}$/.test(input)) {
-            await this.whatsappService.sendTextMessage(from, "⚠️ Invalid format. Please enter a valid 10-digit mobile number.");
+    private async handleMobileInput(from: string, input: string, currentState: ConversationState) {
+        console.log(`▶️ [FlowService] handleMobileInput. Validating input...`);
+        // Validation: 10 digits (Mobile) or 14 digits (ABHA Number)
+        if (!/^\d{10}$/.test(input) && !/^\d{14}$/.test(input)) {
+            console.warn(`⚠️ [FlowService] Invalid input format: ${input}`);
+            await this.whatsappService.sendTextMessage(from, "⚠️ Invalid format. Please enter a valid 10-digit Mobile Number or 14-digit ABHA Number.");
             return;
         }
 
@@ -105,14 +119,22 @@ export class WhatsAppFlowService implements IWhatsAppFlowService {
 
             await this.whatsappService.sendTextMessage(from, `✅ OTP sent to ${input}.\n\nPlease enter the 6-digit OTP:`);
         } catch (error: any) {
+            console.error(`❌ [FlowService] Login Init Failed: ${error.message}`);
+            // Send error but keep session open or reset to known state
             await this.whatsappService.sendTextMessage(from, `❌ Login failed: ${error.message}`);
-            // Restart
+
+            // Should we restart? The user screenshot shows "Welcome..." immediately after error.
+            // Let's reset to menu state but NOT send the welcome message again to avoid spam loop.
+            // Or maybe just ask them to try again?
+            // "Please create ABHA address first." -> User needs to do something external.
+
+            // Best approach: Reset to MENU so they can choose again (or try number again)
             await this.startConversation(from);
         }
     }
 
-    private async handleOtpInput(from: string, content: any, txnId: string) {
-        const otp = content?.body?.trim();
+    private async handleOtpInput(from: string, otp: string, txnId: string) {
+        console.log(`▶️ [FlowService] handleOtpInput.`);
         if (!/^\d{6}$/.test(otp)) {
             await this.whatsappService.sendTextMessage(from, "⚠️ Invalid OTP format. Please enter a 6-digit code.");
             return;
