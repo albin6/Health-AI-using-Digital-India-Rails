@@ -83,7 +83,7 @@ export class WhatsAppFlowService implements IWhatsAppFlowService {
         console.log(`💾 [FlowService] State saved: MENU_SELECTION`);
         await this.whatsappService.sendTextMessage(
             from,
-            "👋 Welcome to Health AI!\n\nPlease select an option:\n1️⃣ View Details\n2️⃣ Upload Data"
+            "👋 Welcome to ABHA Pocket!\n\nPlease select an option:\n1️⃣ View Details\n2️⃣ Upload Data"
         );
     }
 
@@ -235,7 +235,33 @@ export class WhatsAppFlowService implements IWhatsAppFlowService {
             });
 
             // 7. Success Message
-            await this.whatsappService.sendTextMessage(from, "✅ Analysis Complete! You can view the report in your dashboard.");
+            await this.whatsappService.sendTextMessage(from, "✅ Analysis Complete! Your report has been successfully uploaded");
+
+            // 8. Send Structured Summary
+            const extracted = mlResponse.extracted_data || {};
+            let summaryMsg = "📄 *Prescription Summary*\n";
+
+            if (extracted.diagnosis) {
+                summaryMsg += `\n🩺 *Diagnosis:* ${extracted.diagnosis}`;
+            }
+
+            if (extracted.medications && extracted.medications.length > 0) {
+                summaryMsg += `\n\n💊 *Medications:*`;
+                extracted.medications.forEach((m: any) => {
+                    const details = [m.dosage, m.frequency, m.duration].filter(d => d).join(", ");
+                    summaryMsg += `\n- ${m.name}${details ? ` (${details})` : ""}`;
+                });
+            }
+
+            if (extracted.tests_ordered && extracted.tests_ordered.length > 0) {
+                summaryMsg += `\n\n🧪 *Tests Ordered:*`;
+                extracted.tests_ordered.forEach((t: string) => {
+                    summaryMsg += `\n- ${t}`;
+                });
+            }
+
+            await this.whatsappService.sendTextMessage(from, summaryMsg);
+
             await this.startConversation(from); // Reset
 
         } catch (error: any) {
