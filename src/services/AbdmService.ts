@@ -28,10 +28,16 @@ export class AbdmService implements IAbdmService {
 
     public async initLogin(identifier: string): Promise<string> {
         console.log(`📡 [AbdmService] Requesting Init Login for: ${identifier}`);
+
+        // Determine method based on length (14 digits -> abha-number, 10 digits -> mobile)
+        const isAbhaNumber = /^\d{14}$/.test(identifier);
+        const method = isAbhaNumber ? "abha-number" : "mobile";
+        console.log(`ℹ️ [AbdmService] Detected method: ${method}`);
+
         try {
             const response = await this.client.post("/abdm/na/v1/profile/login/init", {
                 identifier: identifier,
-                method: "mobile"
+                method: method
             });
             console.log("✅ [AbdmService] Init Login Success. TxnID:", response.data?.txn_id);
             return response.data.txn_id;

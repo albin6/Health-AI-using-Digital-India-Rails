@@ -25,11 +25,14 @@ export class WhatsAppFlowService implements IWhatsAppFlowService {
         let session = await this.sessionStore.getSession(from);
         console.log(`ℹ️ [FlowService] Current Session State: ${session?.state || "NONE"}`);
 
-        // Extract plain text body
+        // Extract plain text body or interactive button response
         let textBody = "";
         if (messageType === "text" && content?.text?.body) {
             textBody = content.text.body.trim();
+        } else if (messageType === "interactive" && content?.interactive?.button_reply) {
+            textBody = content.interactive.button_reply.id; // Or title
         }
+
         console.log(`📝 [FlowService] Extracted Text: "${textBody}"`);
 
         // Auto-start for new users or explicit "Hi"
@@ -165,7 +168,15 @@ export class WhatsAppFlowService implements IWhatsAppFlowService {
             await this.whatsappService.sendTextMessage(from, `✅ OTP sent to ${input}.\n\nPlease enter the 6-digit OTP:`);
         } catch (error: any) {
             console.error(`❌ [FlowService] Login Init Failed: ${error.message}`);
+            // Send error but keep session open or reset to known state
             await this.whatsappService.sendTextMessage(from, `❌ Login failed: ${error.message}`);
+
+            // Should we restart? The user screenshot shows "Welcome..." immediately after error.
+            // Let's reset to menu state but NOT send the welcome message again to avoid spam loop.
+            // Or maybe just ask them to try again?
+            // "Please create ABHA address first." -> User needs to do something external.
+
+            // Best approach: Reset to MENU so they can choose again (or try number again)
             await this.startConversation(from);
         }
     }
