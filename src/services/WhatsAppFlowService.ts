@@ -6,6 +6,7 @@ import { IAbdmService } from "./interfaces/IAbdmService";
 import { IWhatsAppService } from "./interfaces/IWhatsAppService";
 import { IFhirService } from "./interfaces/IFhirService"; // Added import
 import { ConversationState } from "../types/SessionState";
+import { ProcessingStatus } from "../types/domain";
 
 @injectable()
 export class WhatsAppFlowService implements IWhatsAppFlowService {
@@ -227,10 +228,10 @@ export class WhatsAppFlowService implements IWhatsAppFlowService {
             await repo.create({
                 userUuid: from,
                 fileUrl: "whatsapp_media_id_" + imageId, // Placeholder
-                status: "PROCESSED",
+                status: ProcessingStatus.FHIR_MAPPED,
                 ocrOutput: mlResponse,
                 fhirResource: fhirBundle, // Save FHIR bundle
-                auditLog: [{ status: "PROCESSED", details: "Processed via WhatsApp Flow & FHIR Mapped" }]
+                auditLog: [{ status: ProcessingStatus.FHIR_MAPPED, details: "Processed via WhatsApp Flow & FHIR Mapped" }]
             });
 
             // 7. Success Message
