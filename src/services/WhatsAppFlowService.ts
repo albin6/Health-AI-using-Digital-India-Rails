@@ -60,7 +60,7 @@ export class WhatsAppFlowService implements IWhatsAppFlowService {
 
     private async handleMenuSelection(from: string, type: string, content: any) {
         const text = content?.body?.trim();
-
+        console.log("Menu Selection:", text);
         if (text === "1") {
             await this.sessionStore.updateState(from, { state: ConversationState.AWAITING_MOBILE_VIEW });
             await this.whatsappService.sendTextMessage(from, "Please enter your 10-digit Mobile Number or ABHA Number to view details:");
