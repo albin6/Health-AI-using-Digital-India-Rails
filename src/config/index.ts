@@ -14,6 +14,7 @@ const envSchema = z.object({
     WHATSAPP_VERIFY_TOKEN: z.string().min(1),
     WHATSAPP_ACCESS_TOKEN: z.string().min(1),
     WHATSAPP_PHONE_NUMBER_ID: z.string().min(1),
+    ML_API_URL: z.string().url().default("https://lygs5zeql4.execute-api.ap-south-1.amazonaws.com/Prod"),
 });
 
 const _env = envSchema.safeParse(process.env);
@@ -42,5 +43,8 @@ export const config: IAppConfig = {
         verifyToken: envVars.WHATSAPP_VERIFY_TOKEN,
         accessToken: envVars.WHATSAPP_ACCESS_TOKEN,
         phoneNumberId: envVars.WHATSAPP_PHONE_NUMBER_ID,
+    },
+    ml: {
+        apiUrl: envVars.ML_API_URL,
     },
 };
