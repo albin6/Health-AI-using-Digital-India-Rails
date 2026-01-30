@@ -21,8 +21,10 @@ export class WhatsAppFlowService implements IWhatsAppFlowService {
     public async handleMessage(from: string, messageType: string, content: any): Promise<void> {
         let session = await this.sessionStore.getSession(from);
 
+        console.log("Message Type:", messageType);
+        console.log("Content:", content);
         // Auto-start for new users or explicit "Hi"
-        if (!session || (messageType === "text" && content?.body?.toLowerCase() === "hi")) {
+        if (!session || (messageType === "text" && (content.toLowerCase() === "hi" || content.toLowerCase() === "hello"))) {
             await this.startConversation(from);
             return;
         }
@@ -59,8 +61,9 @@ export class WhatsAppFlowService implements IWhatsAppFlowService {
     }
 
     private async handleMenuSelection(from: string, type: string, content: any) {
-        const text = content?.body?.trim();
-        console.log("Menu Selection:", text);
+        const text = content.trim();
+        console.log("Menu Selection Content:", content);
+        console.log("Menu Selection Text:", text);
         if (text === "1") {
             await this.sessionStore.updateState(from, { state: ConversationState.AWAITING_MOBILE_VIEW });
             await this.whatsappService.sendTextMessage(from, "Please enter your 10-digit Mobile Number or ABHA Number to view details:");
@@ -73,7 +76,7 @@ export class WhatsAppFlowService implements IWhatsAppFlowService {
     }
 
     private async handleMobileInput(from: string, content: any, currentState: ConversationState) {
-        const input = content?.body?.trim();
+        const input = content.trim();
         // Basic validation: 10 digits (Mobile) or 14 digits (ABHA). Let's assume user enters Mobile for API 1.
         if (!/^\d{10}$/.test(input)) {
             await this.whatsappService.sendTextMessage(from, "⚠️ Invalid format. Please enter a valid 10-digit mobile number.");
