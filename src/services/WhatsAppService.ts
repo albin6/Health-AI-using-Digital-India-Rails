@@ -39,6 +39,13 @@ export class WhatsAppService implements IWhatsAppService {
                 const entry = body.entry?.[0];
                 const changes = entry?.changes?.[0];
                 const value = changes?.value;
+
+                if (value?.statuses) {
+                    // Status update (sent/delivered/read), ignore or log verbosely
+                    // console.log("ℹ️ [WhatsAppService] Received status update:", value.statuses[0].status);
+                    return;
+                }
+
                 const messages = value?.messages;
 
                 if (messages && messages.length > 0) {
@@ -53,7 +60,7 @@ export class WhatsAppService implements IWhatsAppService {
                     await this.flowService.handleMessage(from, messageType, message);
                     console.log("✅ [WhatsAppService] Message processing completed by FlowService");
                 } else {
-                    console.log("⚠️ [WhatsAppService] No messages found in payload or status update received.");
+                    console.log("⚠️ [WhatsAppService] No messages or known updates found in payload.");
                 }
             }
         } catch (error) {

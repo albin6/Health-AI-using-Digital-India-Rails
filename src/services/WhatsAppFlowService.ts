@@ -23,11 +23,14 @@ export class WhatsAppFlowService implements IWhatsAppFlowService {
         let session = await this.sessionStore.getSession(from);
         console.log(`ℹ️ [FlowService] Current Session State: ${session?.state || "NONE"}`);
 
-        // Extract plain text body
+        // Extract plain text body or interactive button response
         let textBody = "";
         if (messageType === "text" && content?.text?.body) {
             textBody = content.text.body.trim();
+        } else if (messageType === "interactive" && content?.interactive?.button_reply) {
+            textBody = content.interactive.button_reply.id; // Or title
         }
+
         console.log(`📝 [FlowService] Extracted Text: "${textBody}"`);
 
         // Auto-start for new users or explicit "Hi"
@@ -92,10 +95,11 @@ export class WhatsAppFlowService implements IWhatsAppFlowService {
 
     private async handleMobileInput(from: string, input: string, currentState: ConversationState) {
         console.log(`▶️ [FlowService] handleMobileInput. Validating input...`);
-        // Basic validation: 10 digits (Mobile) or 14 digits (ABHA). Let's assume user enters Mobile for API 1.
-        if (!/^\d{10}$/.test(input)) {
-            console.warn(`⚠️ [FlowService] Invalid mobile format`);
-            await this.whatsappService.sendTextMessage(from, "⚠️ Invalid format. Please enter a valid 10-digit mobile number.");
+
+        // Validation: 10 digits (Mobile) or 14 digits (ABHA Number)
+        if (!/^\d{10}$/.test(input) && !/^\d{14}$/.test(input)) {
+            console.warn(`⚠️ [FlowService] Invalid input format: ${input}`);
+            await this.whatsappService.sendTextMessage(from, "⚠️ Invalid format. Please enter a valid 10-digit Mobile Number or 14-digit ABHA Number.");
             return;
         }
 
@@ -123,7 +127,15 @@ export class WhatsAppFlowService implements IWhatsAppFlowService {
             await this.whatsappService.sendTextMessage(from, `✅ OTP sent to ${input}.\n\nPlease enter the 6-digit OTP:`);
         } catch (error: any) {
             console.error(`❌ [FlowService] Login Init Failed: ${error.message}`);
+            // Send error but keep session open or reset to known state
             await this.whatsappService.sendTextMessage(from, `❌ Login failed: ${error.message}`);
+
+            // Should we restart? The user screenshot shows "Welcome..." immediately after error.
+            // Let's reset to menu state but NOT send the welcome message again to avoid spam loop.
+            // Or maybe just ask them to try again?
+            // "Please create ABHA address first." -> User needs to do something external.
+
+            // Best approach: Reset to MENU so they can choose again (or try number again)
             await this.startConversation(from);
         }
     }
