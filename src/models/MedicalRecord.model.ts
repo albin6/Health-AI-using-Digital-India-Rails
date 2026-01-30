@@ -6,7 +6,7 @@ export interface IMedicalRecordDocument extends IMedicalRecord, Document {}
 const MedicalRecordSchema = new Schema({
     userUuid: { type: String, required: true, index: true },
     fileUrl: { type: String, required: true },
-    maskedFileUrl: { type: String },
+    maskedFileUrl: { type: String },  // need to check if required
     ocrOutput: { type: Schema.Types.Mixed }, // Store JSON directly
     fhirResource: { type: Schema.Types.Mixed },
     status: { 
