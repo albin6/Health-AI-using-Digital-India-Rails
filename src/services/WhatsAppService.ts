@@ -29,8 +29,11 @@ export class WhatsAppService implements IWhatsAppService {
     }
 
     public async handleIncomingMessage(body: any): Promise<void> {
+        console.log("🔄 [WhatsAppService] Handling incoming message payload");
         try {
+            console.log("🔑 [WhatsAppService] Validating Eka Auth Token...");
             await this.ekaAuthService.getValidToken();
+            console.log("✅ [WhatsAppService] Auth Token Valid");
 
             if (body.object === "whatsapp_business_account") {
                 const entry = body.entry?.[0];
@@ -43,12 +46,18 @@ export class WhatsAppService implements IWhatsAppService {
                     const from = message.from;
                     const messageType = message.type;
 
+                    console.log(`📨 [WhatsAppService] Processing message from ${from} of type ${messageType}`);
+
                     // Delegate to Flow Service
+                    console.log("👉 [WhatsAppService] Delegating to WhatsAppFlowService");
                     await this.flowService.handleMessage(from, messageType, message);
+                    console.log("✅ [WhatsAppService] Message processing completed by FlowService");
+                } else {
+                    console.log("⚠️ [WhatsAppService] No messages found in payload or status update received.");
                 }
             }
         } catch (error) {
-            console.error("Error processing webhook:", error);
+            console.error("❌ [WhatsAppService] Error processing webhook:", error);
         }
     }
 

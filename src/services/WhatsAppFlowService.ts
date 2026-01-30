@@ -19,74 +19,89 @@ export class WhatsAppFlowService implements IWhatsAppFlowService {
     }
 
     public async handleMessage(from: string, messageType: string, content: any): Promise<void> {
+        console.log(`▶️ [FlowService] handleMessage called for ${from}`);
         let session = await this.sessionStore.getSession(from);
+        console.log(`ℹ️ [FlowService] Current Session State: ${session?.state || "NONE"}`);
 
-        console.log("Message Type:", messageType);
-        console.log("Content:", content);
+        // Extract plain text body
+        let textBody = "";
+        if (messageType === "text" && content?.text?.body) {
+            textBody = content.text.body.trim();
+        }
+        console.log(`📝 [FlowService] Extracted Text: "${textBody}"`);
+
         // Auto-start for new users or explicit "Hi"
-        if (!session || (messageType === "text" && (content.toLowerCase() === "hi" || content.toLowerCase() === "hello"))) {
+        if (!session || (messageType === "text" && (textBody.toLowerCase() === "hi" || textBody.toLowerCase() === "hello"))) {
+            console.log("👋 [FlowService] Starting new conversation");
             await this.startConversation(from);
             return;
         }
 
+        console.log(`🔄 [FlowService] Routing based on state: ${session.state}`);
         switch (session.state) {
             case ConversationState.MENU_SELECTION:
-                await this.handleMenuSelection(from, messageType, content);
+                await this.handleMenuSelection(from, messageType, textBody);
                 break;
             case ConversationState.AWAITING_MOBILE_VIEW:
             case ConversationState.AWAITING_MOBILE_UPLOAD:
-                await this.handleMobileInput(from, content, session.state);
+                await this.handleMobileInput(from, textBody, session.state);
                 break;
             case ConversationState.AWAITING_OTP:
-                await this.handleOtpInput(from, content, session.txnId!);
+                await this.handleOtpInput(from, textBody, session.txnId!);
                 break;
             case ConversationState.LOGGED_IN:
+                console.log("ℹ️ [FlowService] User already logged in");
                 await this.whatsappService.sendTextMessage(from, "You are already logged in. Type 'Hi' to restart.");
                 break;
             default:
+                console.warn(`⚠️ [FlowService] Unknown state: ${session.state}, restarting.`);
                 await this.startConversation(from);
                 break;
         }
+        console.log(`⏹️ [FlowService] handleMessage processing finished`);
     }
 
     private async startConversation(from: string) {
+        console.log(`▶️ [FlowService] startConversation`);
         await this.sessionStore.saveSession(from, {
             state: ConversationState.MENU_SELECTION,
             lastUpdated: Date.now()
         });
+        console.log(`💾 [FlowService] State saved: MENU_SELECTION`);
         await this.whatsappService.sendTextMessage(
             from,
             "👋 Welcome to Health AI!\n\nPlease select an option:\n1️⃣ View Details\n2️⃣ Upload Data"
         );
     }
 
-    private async handleMenuSelection(from: string, type: string, content: any) {
-        const text = content.trim();
-        console.log("Menu Selection Content:", content);
-        console.log("Menu Selection Text:", text);
+    private async handleMenuSelection(from: string, type: string, text: string) {
+        console.log(`▶️ [FlowService] handleMenuSelection. Input: ${text}`);
         if (text === "1") {
             await this.sessionStore.updateState(from, { state: ConversationState.AWAITING_MOBILE_VIEW });
+            console.log(`💾 [FlowService] State updated: AWAITING_MOBILE_VIEW`);
             await this.whatsappService.sendTextMessage(from, "Please enter your 10-digit Mobile Number or ABHA Number to view details:");
         } else if (text === "2") {
             await this.sessionStore.updateState(from, { state: ConversationState.AWAITING_MOBILE_UPLOAD });
+            console.log(`💾 [FlowService] State updated: AWAITING_MOBILE_UPLOAD`);
             await this.whatsappService.sendTextMessage(from, "Please enter your 10-digit Mobile Number or ABHA Number to upload data:");
         } else {
+            console.warn(`⚠️ [FlowService] Invalid menu selection: ${text}`);
             await this.whatsappService.sendTextMessage(from, "🚫 Invalid input. Please reply with '1' or '2'.");
         }
     }
 
-    private async handleMobileInput(from: string, content: any, currentState: ConversationState) {
-        const input = content.trim();
+    private async handleMobileInput(from: string, input: string, currentState: ConversationState) {
+        console.log(`▶️ [FlowService] handleMobileInput. Validating input...`);
         // Basic validation: 10 digits (Mobile) or 14 digits (ABHA). Let's assume user enters Mobile for API 1.
         if (!/^\d{10}$/.test(input)) {
+            console.warn(`⚠️ [FlowService] Invalid mobile format`);
             await this.whatsappService.sendTextMessage(from, "⚠️ Invalid format. Please enter a valid 10-digit mobile number.");
             return;
         }
 
         if (currentState === ConversationState.AWAITING_MOBILE_UPLOAD) {
-            // Requirement: "Stop there"
+            console.log(`ℹ️ [FlowService] Upload flow selected (placeholder)`);
             await this.whatsappService.sendTextMessage(from, "✅ Mobile received. Upload feature coming soon!");
-            // Reset or keep state? Let's reset to avoid stuck state.
             await this.sessionStore.clearSession(from);
             return;
         }
@@ -94,26 +109,29 @@ export class WhatsAppFlowService implements IWhatsAppFlowService {
         // View Details Flow
         try {
             await this.whatsappService.sendTextMessage(from, "⏳ Initiating login...");
+            console.log(`📡 [FlowService] Calling AbdmService.initLogin for ${input}`);
             const txnId = await this.abdmService.initLogin(input);
-            console.log("Txn Generated:", txnId);
+            console.log(`✅ [FlowService] Init Login Success. TxnId: ${txnId}`);
 
             await this.sessionStore.updateState(from, {
                 state: ConversationState.AWAITING_OTP,
                 mobileNumber: input,
                 txnId: txnId
             });
+            console.log(`💾 [FlowService] State updated: AWAITING_OTP`);
 
             await this.whatsappService.sendTextMessage(from, `✅ OTP sent to ${input}.\n\nPlease enter the 6-digit OTP:`);
         } catch (error: any) {
+            console.error(`❌ [FlowService] Login Init Failed: ${error.message}`);
             await this.whatsappService.sendTextMessage(from, `❌ Login failed: ${error.message}`);
-            // Restart
             await this.startConversation(from);
         }
     }
 
-    private async handleOtpInput(from: string, content: any, txnId: string) {
-        const otp = content?.body?.trim();
+    private async handleOtpInput(from: string, otp: string, txnId: string) {
+        console.log(`▶️ [FlowService] handleOtpInput.`);
         if (!/^\d{6}$/.test(otp)) {
+            console.warn(`⚠️ [FlowService] Invalid OTP format`);
             await this.whatsappService.sendTextMessage(from, "⚠️ Invalid OTP format. Please enter a 6-digit code.");
             return;
         }
@@ -122,25 +140,31 @@ export class WhatsAppFlowService implements IWhatsAppFlowService {
             await this.whatsappService.sendTextMessage(from, "⏳ Verifying OTP...");
 
             // API 2: Verify
+            console.log(`📡 [FlowService] Calling AbdmService.verifyOtp`);
             const verifyResponse = await this.abdmService.verifyOtp(txnId, otp);
+            console.log(`✅ [FlowService] OTP Verified. Requesting Profile Link...`);
 
-            // API 3: Link/Login (Taking first profile automatically as simplified flow)
+            // API 3: Link/Login
             if (verifyResponse.profiles.length === 0) {
                 throw new Error("No ABHA linked to this number. Please create one first.");
             }
 
             const selectedProfile = verifyResponse.profiles[0];
+            console.log(`📡 [FlowService] Calling AbdmService.linkPhr for ${selectedProfile.abha_address}`);
             const profileDetails = await this.abdmService.linkPhr(txnId, selectedProfile.abha_address);
+            console.log(`✅ [FlowService] PHR Linked Successfully`);
 
             await this.sessionStore.updateState(from, {
                 state: ConversationState.LOGGED_IN,
                 tempData: profileDetails
             });
+            console.log(`💾 [FlowService] State updated: LOGGED_IN`);
 
             const msg = `🎉 **Login Success!**\n\nName: ${profileDetails.first_name} ${profileDetails.last_name}\nABHA: ${profileDetails.abha_address}\nMobile: ${profileDetails.mobile}`;
             await this.whatsappService.sendTextMessage(from, msg);
 
         } catch (error: any) {
+            console.error(`❌ [FlowService] OTP Verification/Linking Failed: ${error.message}`);
             await this.whatsappService.sendTextMessage(from, `❌ Verification failed: ${error.message}\n\nPlease enter OTP again or type 'Hi' to restart.`);
         }
     }
