@@ -24,7 +24,16 @@ export class WhatsAppController {
     };
 
     public handleWebhook = async (req: Request, res: Response) => {
-        this.whatsappService.handleIncomingMessage(req.body);
-        res.status(200).end();
+        console.log("📥 [WhatsAppController] Received Webhook Event");
+        // console.log("Payload:", JSON.stringify(req.body, null, 2)); // Optional: Verbose logging
+
+        try {
+            await this.whatsappService.handleIncomingMessage(req.body);
+            console.log("✅ [WhatsAppController] Webhook processed successfully");
+            res.status(200).end();
+        } catch (error) {
+            console.error("❌ [WhatsAppController] Error processing webhook:", error);
+            res.status(200).end(); // Always return 200 to WhatsApp to avoid retries on logic errors
+        }
     };
 }
